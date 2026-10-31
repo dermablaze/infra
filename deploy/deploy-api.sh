@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
 # Deploy DermaBlaze API
-# Run on the server as root or dermablaze user
 # Usage: bash deploy/deploy-api.sh
 # ============================================================
 set -euo pipefail
@@ -20,8 +19,10 @@ else
   cd $APP_DIR
 fi
 
-echo "==> Installing dependencies..."
-npm ci --omit=dev
+cd $APP_DIR
+
+echo "==> Installing all dependencies (including devDeps for build)..."
+npm ci
 
 echo "==> Running Prisma migrations..."
 npx prisma migrate deploy
@@ -31,6 +32,9 @@ npx prisma generate
 
 echo "==> Building TypeScript..."
 npm run build
+
+echo "==> Pruning dev dependencies..."
+npm prune --omit=dev
 
 echo "==> Restarting API via PM2..."
 if pm2 list | grep -q "dermablaze-api"; then
