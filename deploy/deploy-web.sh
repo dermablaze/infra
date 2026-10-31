@@ -31,7 +31,7 @@ echo "==> Installing dependencies..."
 npm ci
 
 echo "==> Building..."
-VITE_API_URL=${VITE_API_URL:-"http://$(curl -s ifconfig.me)/api/v1"} npm run build
+VITE_API_URL=${VITE_API_URL:-"http://$(curl -4s ifconfig.me)/api/v1"} npm run build
 
 echo "==> Copying build to web root..."
 rm -rf $WEB_DIR/*
@@ -41,4 +41,4 @@ echo "==> Reloading Nginx..."
 systemctl reload nginx
 
 echo "✅ Web deployed successfully!"
-echo "   Open: http://$(curl -s ifconfig.me)"
+echo "   Open: http://$(curl -4s ifconfig.me)"
