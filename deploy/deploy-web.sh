@@ -1,18 +1,27 @@
 #!/usr/bin/env bash
 # ============================================================
 # Deploy DermaBlaze Web (React SPA)
-# Run on the server as root or dermablaze user
-# Usage: bash deploy/deploy-web.sh
+# Usage: VITE_API_URL=http://your-server/api/v1 bash deploy/deploy-web.sh
 # ============================================================
 set -euo pipefail
 
-REPO="https://github.com/dermablaze/deosons-web.git"
+GH_TOKEN="${GH_TOKEN:-}"
+REPO_BASE="github.com/dermablaze/deosons-web.git"
+
+if [ -n "$GH_TOKEN" ]; then
+  REPO="https://mithilesh-joshi-dev:${GH_TOKEN}@${REPO_BASE}"
+else
+  REPO="https://${REPO_BASE}"
+fi
+
 BUILD_DIR="/tmp/dermablaze-web-build"
 WEB_DIR="/var/www/dermablaze-web"
 
 echo "==> Cloning/pulling latest code..."
 if [ -d "$BUILD_DIR/.git" ]; then
-  cd $BUILD_DIR && git pull origin main
+  cd $BUILD_DIR
+  git remote set-url origin $REPO
+  git pull origin main
 else
   git clone $REPO $BUILD_DIR
   cd $BUILD_DIR
@@ -22,7 +31,6 @@ echo "==> Installing dependencies..."
 npm ci
 
 echo "==> Building..."
-# VITE_API_URL must be set in the server environment or passed here
 VITE_API_URL=${VITE_API_URL:-"http://$(curl -s ifconfig.me)/api/v1"} npm run build
 
 echo "==> Copying build to web root..."
@@ -33,3 +41,4 @@ echo "==> Reloading Nginx..."
 systemctl reload nginx
 
 echo "✅ Web deployed successfully!"
+echo "   Open: http://$(curl -s ifconfig.me)"
