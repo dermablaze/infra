@@ -1,121 +1,105 @@
 # DermaBlaze Infra — CLAUDE.md
 
 Infrastructure scripts and config for the DermaBlaze stack on a Contabo VPS (Ubuntu 24.04).
-Single public IP — Nginx routes all traffic by domain name (virtual hosts).
+Single public IP — Nginx routes traffic by domain name.
 
-## Stack
+## Architecture
 
 ```
-VPS (Contabo) — 1 public IP
-└── Nginx (port 80/443)
-      ├── erp.dermablaze.com   → /var/www/dermablaze-web (React SPA)
-      │                        → localhost:3000 /api      (Fastify API)
-      ├── dermablaze.com       → /var/www/dermablaze.com  (future website)
-      └── *.dermablaze.com     → localhost:300X           (future apps)
-
-Node.js 22 + PM2   — runs all backend apps
-PostgreSQL 16      — local, not exposed externally
-Certbot            — SSL per domain, auto-renews
+VPS (Contabo, Ubuntu 24.04)
+│
+├── Nginx (host, ports 80/443) — reverse proxy + static file server
+│   ├── erp.dermablaze.com  → /var/www/dermablaze-web (React SPA)
+│   │                          + proxy :3000/api      (Fastify API)
+│   └── dermablaze.com      → /var/www/dermablaze-website (Next.js static)
+│
+├── Docker — API runs in a container
+│   └── dermablaze-api:latest  (port 3000, host network)
+│
+└── PostgreSQL 16 (host, :5432) — not exposed externally
 ```
+
+## Repos
+
+| Repo | Purpose | Deploy |
+|---|---|---|
+| `dermablaze/deosons-api` | ERP API (Fastify) | Docker |
+| `dermablaze/deosons-web` | ERP frontend (React/Vite) | Static → Nginx |
+| `dermablaze/dermablaze-website` | Public website (Next.js static) | Static → Nginx |
+| `dermablaze/dermablaze-infra` | This repo — infra scripts | Manual |
 
 ## Repo layout
 
 ```
+bootstrap.sh                  # one-liner fresh-VPS setup
 server/
-  setup.sh                    # one-time bootstrap — run once on fresh VPS as root
-  nginx/
-    dermablaze-erp.conf       # ERP app (React SPA + API proxy)
-    _template.conf            # copy this for each new site/app
-  pm2/
-    ecosystem.config.js       # PM2 process definitions
+  setup.sh                    # full server setup (Node, Docker, PG, Nginx, UFW)
+docker/
+  docker-compose.yml          # Docker services (API + future apps)
+nginx/
+  dermablaze-erp.conf         # ERP (SPA + API proxy)
+  dermablaze-website.conf     # Public website
+  _template.conf              # Copy for new sites
 deploy/
-  deploy-api.sh               # pull + migrate + build + pm2 restart (ERP API)
-  deploy-web.sh               # pull + vite build + copy to /var/www (ERP web)
-  add-site.sh                 # add a new domain to Nginx in one command
-monitoring/                   # (planned) uptime, backups, log rotation
+  deploy-api.sh               # pull + docker build + migrate + restart
+  deploy-web.sh               # pull + vite build + copy to /var/www
+  deploy-website.sh           # pull + next build + copy to /var/www
+  add-site.sh                 # add any new domain to Nginx in one command
 .env.example                  # template for /opt/dermablaze-api/.env
 ```
 
 ## Server paths
 
-| What | Where on server |
+| What | Path |
 |---|---|
-| ERP API code | `/opt/dermablaze-api/` |
+| ERP API source | `/opt/dermablaze-api/` |
+| ERP API env | `/opt/dermablaze-api/.env` |
 | ERP web static | `/var/www/dermablaze-web/` |
+| Public website static | `/var/www/dermablaze-website/` |
 | Infra scripts | `/opt/dermablaze-infra/` |
-| Nginx configs | `/etc/nginx/sites-available/` |
-| PM2 logs | `/var/log/dermablaze/` |
-| API env file | `/opt/dermablaze-api/.env` |
+| Docker Compose | `/opt/dermablaze-infra/docker/docker-compose.yml` |
+| Nginx configs | `/etc/nginx/sites-available/` (symlinked from `nginx/`) |
+| Logs | `/var/log/dermablaze/` |
 
 ## First-time setup (new VPS)
 
 ```bash
-# 1. SSH in
-ssh root@YOUR_SERVER_IP
+# SSH in
+ssh root@213.199.38.116
 
-# 2. Clone infra repo
-git clone https://github.com/dermablaze/infra /opt/dermablaze-infra
-cd /opt/dermablaze-infra
+# Bootstrap everything (Node, Docker, PG, Nginx, UFW, user)
+curl -fsSL https://raw.githubusercontent.com/dermablaze/dermablaze-infra/main/bootstrap.sh | bash
 
-# 3. Bootstrap (Node, PostgreSQL, Nginx, PM2, user, firewall)
-bash server/setup.sh
+# Or manually:
+git clone https://github.com/dermablaze/dermablaze-infra /opt/dermablaze-infra
+bash /opt/dermablaze-infra/server/setup.sh
 
-# 4. Fill in env
-cp .env.example /opt/dermablaze-api/.env
-nano /opt/dermablaze-api/.env
+# Deploy all apps
+GH_TOKEN=your_token bash /opt/dermablaze-infra/deploy/deploy-api.sh
+GH_TOKEN=your_token bash /opt/dermablaze-infra/deploy/deploy-web.sh
+GH_TOKEN=your_token bash /opt/dermablaze-infra/deploy/deploy-website.sh
 
-# 5. Enable ERP Nginx config
-ln -s /etc/nginx/sites-available/dermablaze-erp.conf /etc/nginx/sites-enabled/
-nginx -t && systemctl reload nginx
-
-# 6. Deploy apps
-bash deploy/deploy-api.sh
-bash deploy/deploy-web.sh
+# SSL (after DNS is pointed here)
+certbot --nginx -d erp.dermablaze.com -d dermablaze.com -d www.dermablaze.com
 ```
-
-## Adding a new site or app
-
-```bash
-# New Node.js app on port 3001
-bash /opt/dermablaze-infra/deploy/add-site.sh app.dermablaze.com proxy 3001
-
-# New static website
-bash /opt/dermablaze-infra/deploy/add-site.sh dermablaze.com static
-
-# Then add SSL once DNS is pointed here
-certbot --nginx -d app.dermablaze.com
-```
-
-For manual config, copy `server/nginx/_template.conf`, fill in domain + port, enable it.
 
 ## Redeploy after code changes
 
 ```bash
-bash /opt/dermablaze-infra/deploy/deploy-api.sh   # ERP API
-bash /opt/dermablaze-infra/deploy/deploy-web.sh   # ERP frontend
+GH_TOKEN=ghp_xxx bash /opt/dermablaze-infra/deploy/deploy-api.sh
+GH_TOKEN=ghp_xxx bash /opt/dermablaze-infra/deploy/deploy-web.sh
+GH_TOKEN=ghp_xxx bash /opt/dermablaze-infra/deploy/deploy-website.sh
 ```
 
-## SSL
+## Adding a new app
 
 ```bash
-# Single domain
-certbot --nginx -d erp.dermablaze.com
+# 1. Add it to docker/docker-compose.yml (if it's a Node.js server)
+# 2. Create nginx/<domain>.conf (or use add-site.sh)
+bash /opt/dermablaze-infra/deploy/add-site.sh app.dermablaze.com proxy 3001
 
-# Multiple domains at once
-certbot --nginx -d dermablaze.com -d www.dermablaze.com
-```
-Auto-renews via systemd timer — no manual renewal needed.
-
-## Useful commands
-
-```bash
-pm2 status                     # all running processes
-pm2 logs dermablaze-api        # live API logs
-pm2 restart dermablaze-api     # restart API
-nginx -t                       # test nginx config
-systemctl reload nginx         # reload nginx (no downtime)
-sudo -u postgres psql          # PostgreSQL shell
-certbot renew --dry-run        # test SSL auto-renewal
+# 3. Get SSL once DNS is pointed here
+certbot --nginx -d app.dermablaze.com
 ```
 
 ## Port allocation
@@ -125,3 +109,20 @@ certbot renew --dry-run        # test SSL auto-renewal
 | 3000 | DermaBlaze ERP API |
 | 3001 | (next app) |
 | 3002 | (next app) |
+
+## Useful commands
+
+```bash
+# Docker
+docker compose -f /opt/dermablaze-infra/docker/docker-compose.yml ps
+docker compose -f /opt/dermablaze-infra/docker/docker-compose.yml logs -f api
+docker compose -f /opt/dermablaze-infra/docker/docker-compose.yml restart api
+
+# Nginx
+nginx -t && systemctl reload nginx
+cat /etc/nginx/sites-enabled/*
+
+# PostgreSQL
+sudo -u postgres psql
+certbot renew --dry-run
+```

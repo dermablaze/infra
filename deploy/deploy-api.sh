@@ -1,19 +1,30 @@
 #!/usr/bin/env bash
 # ============================================================
-# Deploy DermaBlaze API
+# Deploy DermaBlaze API (Docker)
 # Usage: bash deploy/deploy-api.sh
 # ============================================================
 set -euo pipefail
 
-REPO="https://github.com/dermablaze/deosons-api.git"
+GH_TOKEN="${GH_TOKEN:-}"
+REPO_BASE="github.com/dermablaze/deosons-api.git"
+
+if [ -n "$GH_TOKEN" ]; then
+  REPO="https://x-access-token:${GH_TOKEN}@${REPO_BASE}"
+else
+  REPO="https://${REPO_BASE}"
+fi
+
 APP_DIR="/opt/dermablaze-api"
+COMPOSE_FILE="/opt/dermablaze-infra/docker/docker-compose.yml"
 LOG_DIR="/var/log/dermablaze"
 
 mkdir -p $LOG_DIR
 
 echo "==> Pulling latest code..."
 if [ -d "$APP_DIR/.git" ]; then
-  cd $APP_DIR && git pull origin main
+  cd $APP_DIR
+  git remote set-url origin $REPO
+  git pull origin main
 else
   git clone $REPO $APP_DIR
   cd $APP_DIR
@@ -21,28 +32,23 @@ fi
 
 cd $APP_DIR
 
-echo "==> Installing all dependencies (including devDeps for build)..."
-npm ci
+echo "==> Building Docker image..."
+docker build -t dermablaze-api:latest .
 
-echo "==> Running Prisma migrations..."
-npx prisma migrate deploy
+echo "==> Running database migrations..."
+docker run --rm \
+  --network host \
+  --env-file $APP_DIR/.env \
+  dermablaze-api:latest \
+  npx prisma migrate deploy
 
-echo "==> Generating Prisma client..."
-npx prisma generate
+echo "==> Restarting API container..."
+docker compose -f $COMPOSE_FILE up -d api
 
-echo "==> Building TypeScript..."
-npm run build
+echo "==> Waiting for health check..."
+sleep 5
+docker compose -f $COMPOSE_FILE ps api
 
-echo "==> Pruning dev dependencies..."
-npm prune --omit=dev
-
-echo "==> Restarting API via PM2..."
-if pm2 list | grep -q "dermablaze-api"; then
-  pm2 restart dermablaze-api
-else
-  pm2 start /opt/dermablaze-infra/server/pm2/ecosystem.config.js
-  pm2 save
-fi
-
+echo ""
 echo "✅ API deployed successfully!"
-pm2 status dermablaze-api
+echo "   Logs: docker compose -f $COMPOSE_FILE logs -f api"

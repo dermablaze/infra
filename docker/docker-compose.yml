@@ -1,0 +1,32 @@
+# DermaBlaze — Docker Compose
+# API uses host networking to reach PostgreSQL on localhost:5432.
+# Nginx runs on the host for easy SSL cert management.
+# Static sites (deosons-web, dermablaze-website) are served directly by Nginx.
+#
+# Usage:
+#   cd /opt/dermablaze-infra/docker
+#   docker compose up -d api
+#   docker compose logs -f api
+
+services:
+  api:
+    image: dermablaze-api:latest
+    restart: unless-stopped
+    network_mode: host          # sees host's localhost:5432 (PostgreSQL)
+    env_file:
+      - /opt/dermablaze-api/.env
+    volumes:
+      - /var/log/dermablaze:/var/log/dermablaze
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Add future Node.js apps here, e.g.:
+  # some-app:
+  #   image: dermablaze-some-app:latest
+  #   restart: unless-stopped
+  #   network_mode: host
+  #   env_file: /opt/dermablaze-some-app/.env
