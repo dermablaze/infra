@@ -38,9 +38,11 @@ echo "==> Building Docker image..."
 docker build -t dermablaze-api:latest .
 
 echo "==> Running database migrations..."
+# Source .env to strip shell quotes — docker run --env-file doesn't strip them
+source $APP_DIR/.env
 docker run --rm \
   --network host \
-  --env-file $APP_DIR/.env \
+  -e DATABASE_URL="$DATABASE_URL" \
   dermablaze-api:latest \
   npx prisma migrate deploy
 
