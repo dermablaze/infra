@@ -5,6 +5,7 @@
 # ============================================================
 set -euo pipefail
 
+[ -f /opt/dermablaze-infra/.secrets ] && source /opt/dermablaze-infra/.secrets
 GH_TOKEN="${GH_TOKEN:-}"
 REPO_BASE="github.com/dermablaze/dermablaze-website.git"
 

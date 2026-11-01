@@ -5,6 +5,8 @@
 # ============================================================
 set -euo pipefail
 
+# Load secrets (GH_TOKEN etc.) if file exists
+[ -f /opt/dermablaze-infra/.secrets ] && source /opt/dermablaze-infra/.secrets
 GH_TOKEN="${GH_TOKEN:-}"
 REPO_BASE="github.com/dermablaze/deosons-api.git"
 

@@ -87,9 +87,9 @@ DATABASE_URL="postgresql://$PG_USER:$DB_PASS@localhost:5432/$PG_DB"
 JWT_SECRET="$JWT_SECRET"
 NODE_ENV="production"
 PORT=3000
+CORS_ORIGIN="https://erp.dermablaze.com,https://dermablaze.com,https://www.dermablaze.com"
 ENV
   echo "    .env created at $API_DIR/.env"
-  echo "    ⚠  Add BQ credentials manually if using BigQuery sync"
 else
   echo "    .env already exists — skipping"
 fi
@@ -99,9 +99,10 @@ ufw allow OpenSSH > /dev/null
 ufw allow 'Nginx Full' > /dev/null
 ufw --force enable > /dev/null
 
-# Enable Nginx configs
+# Enable Nginx configs (skip _template.conf)
 for conf in $INFRA_DIR/nginx/*.conf; do
   name=$(basename $conf)
+  [[ "$name" == _* ]] && continue
   ln -sf $conf /etc/nginx/sites-available/$name
   ln -sf /etc/nginx/sites-available/$name /etc/nginx/sites-enabled/$name
 done
