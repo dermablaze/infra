@@ -87,7 +87,7 @@ DATABASE_URL="postgresql://$PG_USER:$DB_PASS@localhost:5432/$PG_DB"
 JWT_SECRET="$JWT_SECRET"
 NODE_ENV="production"
 PORT=3000
-CORS_ORIGIN="https://erp.dermablaze.com,https://dermablaze.com,https://www.dermablaze.com"
+CORS_ORIGIN="https://erp.dermablze.com,https://dermablze.com,https://www.dermablze.com"
 ENV
   echo "    .env created at $API_DIR/.env"
 else

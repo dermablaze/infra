@@ -33,7 +33,7 @@ npm ci
 
 echo "==> Building..."
 # VITE_API_URL must end in /api/v1 — auto-detect server IP if not set
-VITE_API_URL="${VITE_API_URL:-https://api.dermablaze.com/api/v1}" npm run build
+VITE_API_URL="${VITE_API_URL:-https://api.dermablze.com/api/v1}" npm run build
 
 echo "==> Deploying to web root..."
 rm -rf $WEB_DIR/*
