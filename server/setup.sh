@@ -8,9 +8,12 @@ set -euo pipefail
 APP_USER="dermablaze"
 NODE_VERSION="22"
 PG_DB="dermablaze_db"
+PG_DB_TEST="dermablaze_db_test"
 PG_USER="dermablaze"
 API_DIR="/opt/dermablaze-api"
+API_TEST_DIR="/opt/dermablaze-api-test"
 WEB_DIR="/var/www/dermablaze-web"
+WEB_TEST_DIR="/var/www/dermablaze-web-test"
 WEBSITE_DIR="/var/www/dermablaze-website"
 LOG_DIR="/var/log/dermablaze"
 INFRA_DIR="/opt/dermablaze-infra"
@@ -70,15 +73,17 @@ fi
 # Add to docker group so deploy scripts can manage containers
 usermod -aG docker $APP_USER 2>/dev/null || true
 
-mkdir -p $API_DIR $WEB_DIR $WEBSITE_DIR $LOG_DIR
-chown -R $APP_USER:$APP_USER $API_DIR $WEB_DIR $WEBSITE_DIR $LOG_DIR
+mkdir -p $API_DIR $API_TEST_DIR $WEB_DIR $WEB_TEST_DIR $WEBSITE_DIR $LOG_DIR
+chown -R $APP_USER:$APP_USER $API_DIR $API_TEST_DIR $WEB_DIR $WEB_TEST_DIR $WEBSITE_DIR $LOG_DIR
 
-echo "==> [9/10] Setting up PostgreSQL database..."
+echo "==> [9/10] Setting up PostgreSQL databases (prod + test)..."
 DB_PASS=$(openssl rand -hex 16)
 sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='$PG_USER'" | grep -q 1 || \
   sudo -u postgres psql -c "CREATE USER $PG_USER WITH PASSWORD '$DB_PASS';"
 sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='$PG_DB'" | grep -q 1 || \
   sudo -u postgres psql -c "CREATE DATABASE $PG_DB OWNER $PG_USER;"
+sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='$PG_DB_TEST'" | grep -q 1 || \
+  sudo -u postgres psql -c "CREATE DATABASE $PG_DB_TEST OWNER $PG_USER;"
 
 if [ ! -f "$API_DIR/.env" ]; then
   JWT_SECRET=$(openssl rand -hex 64)
@@ -90,6 +95,20 @@ PORT=3000
 CORS_ORIGIN="https://erp.dermablze.com,https://dermablze.com,https://www.dermablze.com"
 ENV
   echo "    .env created at $API_DIR/.env"
+else
+  echo "    .env already exists — skipping"
+fi
+
+if [ ! -f "$API_TEST_DIR/.env" ]; then
+  JWT_SECRET_TEST=$(openssl rand -hex 64)
+  cat > $API_TEST_DIR/.env << ENV
+DATABASE_URL="postgresql://$PG_USER:$DB_PASS@localhost:5432/$PG_DB_TEST"
+JWT_SECRET="$JWT_SECRET_TEST"
+NODE_ENV="production"
+PORT=3001
+CORS_ORIGIN="https://test-erp.dermablze.com"
+ENV
+  echo "    .env created at $API_TEST_DIR/.env"
 else
   echo "    .env already exists — skipping"
 fi
@@ -126,4 +145,6 @@ echo "  1. Point DNS → this server's IP"
 echo "  2. bash /opt/dermablaze-infra/deploy/deploy-api.sh"
 echo "  3. bash /opt/dermablaze-infra/deploy/deploy-web.sh"
 echo "  4. bash /opt/dermablaze-infra/deploy/deploy-website.sh"
-echo "  5. certbot --nginx -d erp.dermablaze.com -d dermablaze.com -d www.dermablaze.com"
+echo "  5. bash /opt/dermablaze-infra/deploy/deploy-api-test.sh"
+echo "  6. bash /opt/dermablaze-infra/deploy/deploy-web-test.sh"
+echo "  7. certbot --nginx -d dermablze.com -d www.dermablze.com -d erp.dermablze.com -d api.dermablze.com -d test-erp.dermablze.com"

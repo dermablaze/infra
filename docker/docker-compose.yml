@@ -24,9 +24,17 @@ services:
       retries: 3
       start_period: 10s
 
-  # Add future Node.js apps here, e.g.:
-  # some-app:
-  #   image: dermablaze-some-app:latest
-  #   restart: unless-stopped
-  #   network_mode: host
-  #   env_file: /opt/dermablaze-some-app/.env
+  api-test:
+    image: dermablaze-api:latest
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - /opt/dermablaze-api-test/.env
+    volumes:
+      - /var/log/dermablaze:/var/log/dermablaze
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
