@@ -14,11 +14,11 @@ BigQuery is the **legacy data source** — it holds historical doctors, visits, 
 | `doctors` | Accounts (doctors, chemists, distributors) | ✅ daily sync |
 | `visits` | MR field visits + interaction products | ✅ daily sync |
 | `orders` | Legacy orders (old pipeline format) | ❌ superseded |
-| `payments` | All payments | ❌ **NEVER import** — all BQ payments are CASH mode |
+| `payments` | All historical payments | ✅ one-time migration (all modes incl. CASH) |
 | `users` | MR profiles | ✅ one-time migration |
 | `products` | Product catalog | ✅ one-time migration |
 
-> **IMPORTANT:** BQ payments must NEVER be imported into PostgreSQL. The business does not collect cash. All BQ payment records are cash mode and are not valid.
+> **Note on payments:** `09-payments.ts` imports all BQ payments as-is (including CASH mode) — correct for historical data. The daily sync skips payments because new payments are entered directly into PostgreSQL via the ERP app.
 
 ---
 
