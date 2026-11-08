@@ -19,7 +19,7 @@ sed -i 's/^#*PermitEmptyPasswords.*/PermitEmptyPasswords no/' "$SSHD_CONFIG"
 grep -q "^AllowUsers" "$SSHD_CONFIG" \
   || echo "AllowUsers mithiles.joshi" >> "$SSHD_CONFIG"
 
-sshd -t && systemctl restart sshd
+sshd -t && systemctl restart ssh
 echo "    Root login disabled."
 echo "    Password auth disabled."
 echo "    Only 'mithiles.joshi' with SSH key can log in."
