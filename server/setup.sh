@@ -84,7 +84,7 @@ apt-get install -y -qq certbot python3-certbot-nginx
 # ── [7] Admin user ───────────────────────────────────────────
 echo "==> [7/11] Creating admin user '$ADMIN_USER'..."
 if ! id -u "$ADMIN_USER" &>/dev/null; then
-  adduser --disabled-password --gecos "" "$ADMIN_USER"
+  adduser --allow-bad-names --disabled-password --gecos "" "$ADMIN_USER"
 fi
 usermod -aG sudo "$ADMIN_USER"
 usermod -aG docker "$ADMIN_USER"
