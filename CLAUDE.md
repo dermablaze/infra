@@ -28,7 +28,7 @@ VPS (Contabo, Ubuntu 24.04) — 213.199.38.116
 
 ```
 /opt/apps/                        ← all app code (git repos)
-  dermablaze-infra/               ← this repo
+  dermablaze-infra/               ← this repo (github.com/dermablaze/infra)
   dermablaze-api/                 ← prod API source
   dermablaze-api-test/            ← test API source
 
@@ -71,45 +71,21 @@ deploy/
 .secrets.example                # template for GitHub token
 ```
 
-## First-time setup (fresh VPS)
+## SSH access
 
 ```bash
-# 1. SSH in as root
-ssh root@213.199.38.116
-
-# 2. Clone infra and run setup
-git clone https://github.com/dermablaze/dermablaze-infra /opt/apps/dermablaze-infra
-bash /opt/apps/dermablaze-infra/server/setup.sh
-
-# 3. Add your SSH public key
-echo 'ssh-ed25519 AAAA...' >> /home/mithiles.joshi/.ssh/authorized_keys
-
-# 4. Test login in a NEW terminal
+# Admin user (key-based only — root SSH is disabled)
 ssh mithiles.joshi@213.199.38.116
 
-# 5. Once logged in as mithiles.joshi — harden SSH (locks out root permanently)
-sudo bash /opt/apps/dermablaze-infra/server/harden-ssh.sh
-
-# 6. Add GitHub token
-cp /opt/apps/dermablaze-infra/.secrets.example /opt/apps/dermablaze-infra/.secrets
-nano /opt/apps/dermablaze-infra/.secrets
-
-# 7. Deploy
+# All deploy commands require sudo (passwordless)
 sudo bash /opt/apps/dermablaze-infra/deploy/deploy-api.sh
-sudo bash /opt/apps/dermablaze-infra/deploy/deploy-web.sh
-sudo bash /opt/apps/dermablaze-infra/deploy/deploy-api-test.sh
-sudo bash /opt/apps/dermablaze-infra/deploy/deploy-web-test.sh
-sudo bash /opt/apps/dermablaze-infra/deploy/deploy-website.sh
-
-# 8. SSL (after DNS points here — add test-erp A record in Cloudflare first)
-certbot --nginx -d dermablze.com -d www.dermablze.com \
-  -d erp.dermablze.com -d api.dermablze.com \
-  -d test-erp.dermablze.com
 ```
 
 ## Redeploy after code changes
 
 ```bash
+ssh mithiles.joshi@213.199.38.116
+
 # Prod
 sudo bash /opt/apps/dermablaze-infra/deploy/deploy-api.sh
 sudo bash /opt/apps/dermablaze-infra/deploy/deploy-web.sh
@@ -120,6 +96,45 @@ sudo bash /opt/apps/dermablaze-infra/deploy/deploy-web-test.sh
 
 # Public website
 sudo bash /opt/apps/dermablaze-infra/deploy/deploy-website.sh
+```
+
+## First-time setup (fresh VPS)
+
+```bash
+# 1. SSH in as root
+ssh root@213.199.38.116
+
+# 2. Clone infra and run setup
+mkdir -p /opt/apps
+git clone https://github.com/dermablaze/infra /opt/apps/dermablaze-infra
+bash /opt/apps/dermablaze-infra/server/setup.sh
+
+# 3. Add your SSH public key
+echo 'ssh-ed25519 AAAA...' >> /home/mithiles.joshi/.ssh/authorized_keys
+
+# 4. Add sudoers rule (no dot in filename!)
+echo 'mithiles.joshi ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/99-mithilesjoshi
+chmod 440 /etc/sudoers.d/99-mithilesjoshi
+
+# 5. Harden SSH (disables root login — test key login first!)
+bash /opt/apps/dermablaze-infra/server/harden-ssh.sh
+
+# 6. Store GitHub token
+echo 'GH_TOKEN="ghp_xxx"' > /opt/apps/dermablaze-infra/.secrets
+chmod 600 /opt/apps/dermablaze-infra/.secrets
+
+# 7. Deploy all apps
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-api.sh
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-web.sh
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-api-test.sh
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-web-test.sh
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-website.sh
+
+# 8. SSL (add test-erp A record in Cloudflare first)
+certbot --nginx --non-interactive --agree-tos -m YOUR@EMAIL.com \
+  -d dermablze.com -d www.dermablze.com \
+  -d erp.dermablze.com -d api.dermablze.com \
+  -d test-erp.dermablze.com
 ```
 
 ## Port allocation
@@ -146,10 +161,12 @@ nginx -t && systemctl reload nginx
 
 # PostgreSQL
 sudo -u postgres psql
+\c dermablaze_db      # connect to prod DB
+\c dermablaze_db_test # connect to test DB
 
 # SSL renewal test
 certbot renew --dry-run
 
-# Firewall status
+# Firewall
 ufw status
 ```
