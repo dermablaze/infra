@@ -6,122 +6,120 @@ Single public IP — Nginx routes traffic by domain name.
 ## Architecture
 
 ```
-VPS (Contabo, Ubuntu 24.04)
+VPS (Contabo, Ubuntu 24.04) — 213.199.38.116
 │
-├── Nginx (host, ports 80/443) — reverse proxy + static file server
-│   ├── erp.dermablze.com        → /var/www/dermablaze-web          (prod SPA)
+├── Nginx (host, ports 80/443)
+│   ├── erp.dermablze.com        → /var/www/dermablaze-erp          (prod SPA)
 │   ├── api.dermablze.com        → proxy :3000                      (prod API)
-│   ├── test-erp.dermablze.com   → /var/www/dermablaze-web-test     (test SPA)
+│   ├── test-erp.dermablze.com   → /var/www/dermablaze-erp-test     (test SPA)
 │   │                               + proxy :3001/api               (test API)
-│   └── dermablze.com            → /var/www/dermablaze-website      (public website)
+│   └── dermablze.com            → /var/www/dermablaze-website      (public site)
 │
-├── Docker — APIs run in containers (host network)
-│   ├── api       dermablaze-api:latest  port 3000  → dermablaze_db
-│   └── api-test  dermablaze-api:latest  port 3001  → dermablaze_db_test
+├── Docker (host network)
+│   ├── api       dermablaze-api:latest  :3000  → dermablaze_db
+│   └── api-test  dermablaze-api:latest  :3001  → dermablaze_db_test
 │
-└── PostgreSQL 16 (host, :5432)
+└── PostgreSQL 16 (host, :5432 — not exposed externally)
     ├── dermablaze_db       (production)
     └── dermablaze_db_test  (test)
 ```
 
-## Repos
+## Directory layout on server
 
-| Repo | Purpose | Deploy |
-|---|---|---|
-| `dermablaze/deosons-api` | ERP API (Fastify) | Docker |
-| `dermablaze/deosons-web` | ERP frontend (React/Vite) | Static → Nginx |
-| `dermablaze/dermablaze-website` | Public website (Next.js static) | Static → Nginx |
-| `dermablaze/dermablaze-infra` | This repo — infra scripts | Manual |
+```
+/opt/apps/                        ← all app code (git repos)
+  dermablaze-infra/               ← this repo
+  dermablaze-api/                 ← prod API source
+  dermablaze-api-test/            ← test API source
+
+/opt/secrets/                     ← .env files (chmod 640, root:mithiles.joshi)
+  dermablaze-api.env              ← prod API secrets
+  dermablaze-api-test.env         ← test API secrets
+
+/var/www/                         ← static web builds
+  dermablaze-erp/                 ← prod ERP SPA
+  dermablaze-erp-test/            ← test ERP SPA
+  dermablaze-website/             ← public website
+
+/var/log/apps/dermablaze/         ← logs
+```
 
 ## Repo layout
 
 ```
 bootstrap.sh                    # one-liner fresh-VPS setup
 server/
-  setup.sh                      # full server setup (Node, Docker, PG, Nginx, UFW)
+  setup.sh                      # full server setup (idempotent)
+  harden-ssh.sh                 # disable root SSH — run AFTER confirming key login
 docker/
-  docker-compose.yml            # Docker services (api + api-test)
+  docker-compose.yml            # api + api-test services
 nginx/
   dermablaze-erp.conf           # prod SPA (erp.dermablze.com)
-  dermablaze-api.conf           # prod API proxy (api.dermablze.com → :3000)
-  dermablaze-test-erp.conf      # test SPA + API proxy (test-erp.dermablze.com → :3001)
-  dermablaze-website.conf       # public website (dermablze.com)
+  dermablaze-api.conf           # prod API proxy (:3000)
+  dermablaze-test-erp.conf      # test SPA + API proxy (:3001)
+  dermablaze-website.conf       # public website
   _template.conf                # copy for new sites
 deploy/
-  deploy-api.sh                 # prod API — pull + build + migrate + restart
-  deploy-web.sh                 # prod web — build + copy to /var/www
-  deploy-api-test.sh            # test API — pull + build + migrate + restart
-  deploy-web-test.sh            # test web — build + copy to /var/www-test
-  deploy-website.sh             # public website — build + copy to /var/www
-  add-site.sh                   # scaffold a new domain in Nginx
-.env.example                    # template for /opt/dermablaze-api/.env (prod)
-.env.test.example               # template for /opt/dermablaze-api-test/.env (test)
+  deploy-api.sh                 # prod API — build + migrate + restart
+  deploy-api-test.sh            # test API — build + migrate + restart
+  deploy-web.sh                 # prod ERP web — build + copy
+  deploy-web-test.sh            # test ERP web — build + copy
+  deploy-website.sh             # public website — build + copy
+  add-site.sh                   # scaffold a new nginx domain
+.env.example                    # template for /opt/secrets/dermablaze-api.env
+.env.test.example               # template for /opt/secrets/dermablaze-api-test.env
+.secrets.example                # template for GitHub token
 ```
 
-## Server paths
-
-| What | Path |
-|---|---|
-| Prod API source | `/opt/dermablaze-api/` |
-| Prod API env | `/opt/dermablaze-api/.env` |
-| Test API source | `/opt/dermablaze-api-test/` |
-| Test API env | `/opt/dermablaze-api-test/.env` |
-| Prod ERP web | `/var/www/dermablaze-web/` |
-| Test ERP web | `/var/www/dermablaze-web-test/` |
-| Public website | `/var/www/dermablaze-website/` |
-| Infra scripts | `/opt/dermablaze-infra/` |
-| Docker Compose | `/opt/dermablaze-infra/docker/docker-compose.yml` |
-| Nginx configs | `/etc/nginx/sites-available/` (symlinked from `nginx/`) |
-| Logs | `/var/log/dermablaze/` |
-
-## First-time setup (new VPS)
+## First-time setup (fresh VPS)
 
 ```bash
-# SSH in
+# 1. SSH in as root
 ssh root@213.199.38.116
 
-# Bootstrap everything (Node, Docker, PG, Nginx, UFW, user)
-curl -fsSL https://raw.githubusercontent.com/dermablaze/dermablaze-infra/main/bootstrap.sh | bash
+# 2. Clone infra and run setup
+git clone https://github.com/dermablaze/dermablaze-infra /opt/apps/dermablaze-infra
+bash /opt/apps/dermablaze-infra/server/setup.sh
 
-# Or manually:
-git clone https://github.com/dermablaze/dermablaze-infra /opt/dermablaze-infra
-bash /opt/dermablaze-infra/server/setup.sh
+# 3. Add your SSH public key
+echo 'ssh-ed25519 AAAA...' >> /home/mithiles.joshi/.ssh/authorized_keys
 
-# Deploy all apps
-GH_TOKEN=your_token bash /opt/dermablaze-infra/deploy/deploy-api.sh
-GH_TOKEN=your_token bash /opt/dermablaze-infra/deploy/deploy-web.sh
-GH_TOKEN=your_token bash /opt/dermablaze-infra/deploy/deploy-api-test.sh
-GH_TOKEN=your_token bash /opt/dermablaze-infra/deploy/deploy-web-test.sh
-GH_TOKEN=your_token bash /opt/dermablaze-infra/deploy/deploy-website.sh
+# 4. Test login in a NEW terminal
+ssh mithiles.joshi@213.199.38.116
 
-# SSL (after DNS is pointed here — add test-erp A record in Cloudflare first)
-certbot --nginx -d dermablze.com -d www.dermablze.com -d erp.dermablze.com -d api.dermablze.com -d test-erp.dermablze.com
+# 5. Once logged in as mithiles.joshi — harden SSH (locks out root permanently)
+sudo bash /opt/apps/dermablaze-infra/server/harden-ssh.sh
+
+# 6. Add GitHub token
+cp /opt/apps/dermablaze-infra/.secrets.example /opt/apps/dermablaze-infra/.secrets
+nano /opt/apps/dermablaze-infra/.secrets
+
+# 7. Deploy
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-api.sh
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-web.sh
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-api-test.sh
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-web-test.sh
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-website.sh
+
+# 8. SSL (after DNS points here — add test-erp A record in Cloudflare first)
+certbot --nginx -d dermablze.com -d www.dermablze.com \
+  -d erp.dermablze.com -d api.dermablze.com \
+  -d test-erp.dermablze.com
 ```
 
 ## Redeploy after code changes
 
 ```bash
-# Production
-GH_TOKEN=ghp_xxx bash /opt/dermablaze-infra/deploy/deploy-api.sh
-GH_TOKEN=ghp_xxx bash /opt/dermablaze-infra/deploy/deploy-web.sh
+# Prod
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-api.sh
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-web.sh
 
 # Test
-GH_TOKEN=ghp_xxx bash /opt/dermablaze-infra/deploy/deploy-api-test.sh
-GH_TOKEN=ghp_xxx bash /opt/dermablaze-infra/deploy/deploy-web-test.sh
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-api-test.sh
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-web-test.sh
 
 # Public website
-GH_TOKEN=ghp_xxx bash /opt/dermablaze-infra/deploy/deploy-website.sh
-```
-
-## Adding a new app
-
-```bash
-# 1. Add it to docker/docker-compose.yml (if it's a Node.js server)
-# 2. Create nginx/<domain>.conf (or use add-site.sh)
-bash /opt/dermablaze-infra/deploy/add-site.sh app.dermablze.com proxy 3002
-
-# 3. Get SSL once DNS is pointed here
-certbot --nginx -d app.dermablze.com
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-website.sh
 ```
 
 ## Port allocation
@@ -135,16 +133,23 @@ certbot --nginx -d app.dermablze.com
 ## Useful commands
 
 ```bash
+COMPOSE="/opt/apps/dermablaze-infra/docker/docker-compose.yml"
+
 # Docker
-docker compose -f /opt/dermablaze-infra/docker/docker-compose.yml ps
-docker compose -f /opt/dermablaze-infra/docker/docker-compose.yml logs -f api
-docker compose -f /opt/dermablaze-infra/docker/docker-compose.yml restart api
+docker compose -f $COMPOSE ps
+docker compose -f $COMPOSE logs -f api
+docker compose -f $COMPOSE logs -f api-test
+docker compose -f $COMPOSE restart api
 
 # Nginx
 nginx -t && systemctl reload nginx
-cat /etc/nginx/sites-enabled/*
 
 # PostgreSQL
 sudo -u postgres psql
+
+# SSL renewal test
 certbot renew --dry-run
+
+# Firewall status
+ufw status
 ```
