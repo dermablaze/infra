@@ -29,8 +29,9 @@ Infrastructure scripts and config for the DermaBlaze stack on a Contabo VPS (Ubu
                         │  ┌────────────────────────────│──│──┐   │   │
                         │  │  Docker  (host network)    │  │  │   │   │
                         │  │                            ▼  ▼  │   │   │
-                        │  │  api      :3000  dermablaze-api:latest │  │
-                        │  │  api-test :3001  dermablaze-api:latest │  │
+                        │  │  api          :3000  dermablaze-api:latest        │  │
+                        │  │  api-test     :3001  dermablaze-api:latest        │  │
+                        │  │  notification :4000  notification-service:latest  │  │
                         │  └────────────────┬──────────────────┘   │   │
                         │                   │ localhost:5432        │   │
                         │  ┌────────────────▼─────────────────┐    │   │
@@ -63,7 +64,7 @@ Browser → Nginx (TLS termination)
 GCP BigQuery (legacy CRM)
   └─ daily-sync.ts (7 AM cron) ──▶ PostgreSQL dermablaze_db
                                        └─ new doctors + visits only
-                                       └─ NEVER imports payments (all cash)
+                                       └─ NEVER imports payments (new payments go via app)
 ```
 
 ### Security layers
@@ -102,6 +103,7 @@ Secrets: /opt/secrets/ — chmod 640, root:mithiles.joshi
 | `dermablaze/deosons-api` | ERP API (Fastify + Prisma) | Node.js backend |
 | `dermablaze/deosons-web` | ERP frontend (React + Vite) | React SPA |
 | `dermablaze/dermablaze-website` | Public website (Next.js) | Marketing site |
+| `dermablaze/notification-service` | Notification service (Fastify) | Telegram alerts, extensible |
 
 ---
 
@@ -117,12 +119,13 @@ server/
   setup.sh                    # full server setup (idempotent)
   harden-ssh.sh               # disable root SSH — run AFTER confirming key login
 docker/
-  docker-compose.yml          # api + api-test services
+  docker-compose.yml          # api + api-test + notification services
 nginx/
   dermablaze-erp.conf         # prod SPA
   dermablaze-api.conf         # prod API proxy (:3000)
   dermablaze-test-erp.conf    # test SPA + API proxy (:3001)
   dermablaze-website.conf     # public website
+  notify.conf                 # notification service proxy (:4000)
   _template.conf              # copy for new sites
 deploy/
   deploy-api.sh               # prod API — build + migrate + restart
@@ -130,6 +133,7 @@ deploy/
   deploy-web.sh               # prod ERP web — build + copy
   deploy-web-test.sh          # test ERP web — build + copy
   deploy-website.sh           # public website — build + copy
+  deploy-notification.sh      # notification service — build + restart
 .env.example                  # template for /opt/secrets/dermablaze-api.env
 .env.test.example             # template for /opt/secrets/dermablaze-api-test.env
 .secrets.example              # template for GitHub token
@@ -160,6 +164,9 @@ sudo bash /opt/apps/dermablaze-infra/deploy/deploy-web-test.sh
 # Redeploy website
 sudo bash /opt/apps/dermablaze-infra/deploy/deploy-website.sh
 
+# Redeploy notification service
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-notification.sh
+
 # Nginx
 sudo nginx -t && sudo systemctl reload nginx
 
@@ -182,6 +189,7 @@ sudo -u postgres psql
 | 443 | Nginx HTTPS |
 | 3000 | ERP API — production |
 | 3001 | ERP API — test |
+| 4000 | Notification service |
 | 5432 | PostgreSQL (localhost only) |
 | 3002+ | Reserved for future apps |
 
@@ -217,12 +225,13 @@ sudo bash /opt/apps/dermablaze-infra/deploy/deploy-web.sh
 sudo bash /opt/apps/dermablaze-infra/deploy/deploy-api-test.sh
 sudo bash /opt/apps/dermablaze-infra/deploy/deploy-web-test.sh
 sudo bash /opt/apps/dermablaze-infra/deploy/deploy-website.sh
+sudo bash /opt/apps/dermablaze-infra/deploy/deploy-notification.sh
 
 # 7. SSL
 sudo certbot --nginx --non-interactive --agree-tos -m YOUR@EMAIL.com \
   -d dermablze.com -d www.dermablze.com \
   -d erp.dermablze.com -d api.dermablze.com \
-  -d test-erp.dermablze.com
+  -d test-erp.dermablze.com -d notify.dermablze.com
 
 # 8. BQ data — see runbooks/03-bigquery.md
 ```
